@@ -32,7 +32,7 @@ M.ACTION_NAME = {[0] = 'none', 'alert', 'stop', 'briefStop', 'yield', 'slow'}
 -- Single snapshot reused by every vehicle; behaviours consume it inside the same tick.
 local P = {
   id = 0, valid = false,
-  leadId = 0, leadGap = -1, leadSpeed = 0, leadRelSpeed = 0, leadDecel = 0, leadStopped = false,
+  leadId = 0, leadGap = -1, leadSpeed = 0, leadLen = 4.6, leadRelSpeed = 0, leadDecel = 0, leadStopped = false,
   lead2Gap = -1, lead2Speed = 0, -- the car in front of the car in front
   tgtValid = false, tgtFrontGap = -1, tgtFrontSpeed = 0, tgtRearGap = -1, tgtRearSpeed = 0,
   obstacleId = 0, obstacleGap = -1, obstacleHazard = false, rayGap = -1,
@@ -208,7 +208,7 @@ end
 function M.sense(ctx, d, dt, now)
   local objects = map.objects
   P.id, P.valid = ctx.id, false
-  P.leadId, P.leadGap, P.leadSpeed, P.leadRelSpeed = 0, -1, 0, 0
+  P.leadId, P.leadGap, P.leadSpeed, P.leadRelSpeed, P.leadLen = 0, -1, 0, 0, 4.6
   P.leadDecel, P.leadStopped = 0, false
   P.lead2Gap, P.lead2Speed = -1, 0
   P.obstacleId, P.obstacleGap, P.obstacleHazard = 0, -1, false
@@ -320,7 +320,7 @@ function M.sense(ctx, d, dt, now)
               P.lead2Gap, P.lead2Speed = bestFwd, P.leadSpeed
             end
             bestFwd = fwd
-            P.leadId, P.leadGap, P.leadSpeed = oid, fwd, speed
+            P.leadId, P.leadGap, P.leadSpeed, P.leadLen = oid, fwd, speed, oHalfLen * 2
             P.leadSignal = (states and states.turnsignal) or 0
             P.leadHazard = (states and states.hazard_enabled and states.hazard_enabled ~= 0) or false
           elseif fwd < secondFwd then

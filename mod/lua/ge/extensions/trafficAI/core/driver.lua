@@ -59,12 +59,11 @@ function M.new(id, typeId)
     itm = {active = false, timer = 0, phase = 0, speedCap = -1, gapMult = 1,
            targetId = 0, flashTimer = 0},
     dr = {homeOffset = 0, response = 0, responseTimer = 0, pressTimer = 0,
-          speedCap = -1, lastLateral = 99, lastWant = 0, excursion = 0, excursionTimer = 0,
-          wanderAmp = 0, wanderRate = 0, wanderPhase = 0, laneBias = 0,
-          biasTimer = 0, startled = 0,
+          speedCap = -1, lastLateral = 99, wanderRate = 0, wanderPhase = 0,
+          startled = 0, drift = 0, driftDir = 0, home = 0,
           mergerSeen = 0, mergerCourteous = false, letIn = false},
     ot = {phase = 0, targetId = 0, timer = 0, cooldown = 0, urge = 0,
-          speedCap = -1, speedBoost = 1, ignoreId = 0, reason = '',
+          speedCap = -1, speedBoost = 1, ignoreId = 0, reason = '', abortCap = -1,
           homeOffset = 0, targetOffset = 0, needClear = 0, usingOncoming = false,
           cautious = false, reject = '', signalled = false},
     pu = {mode = 0, targetId = 0, timer = 0, phase = 0, speedCap = -1,
@@ -97,8 +96,7 @@ function M.new(id, typeId)
     d.d.errandChance = 0
   end
 
-  d.dr.wanderAmp, d.dr.wanderRate, d.dr.wanderPhase = d.d.wanderAmp, d.d.wanderRate, d.d.wanderPhase
-  d.dr.laneBias = d.d.laneBias
+  d.dr.wanderRate, d.dr.wanderPhase = d.d.wanderRate, d.d.wanderPhase
 
   -- A trip has a mood of its own. Two identical drivers behave differently when one of them
   -- is late, which is what stops a road full of "normal" drivers looking like clones.
@@ -117,6 +115,38 @@ function M.new(id, typeId)
   return d
 end
 
+-- The same person drives a bus differently from a hatchback: slower off the line, softer on
+-- the brakes, further back, and far less keen to go round anyone. Re-applied from the
+-- driver's own values on every refresh, because a recycled vehicle can come back as a
+-- different model.
+local FIT = {'maxAccel', 'maxDecel', 'comfortDecel', 'gapMin', 'gapTime', 'speedFactor',
+             'laneChangeTime', 'overtakeEagerness', 'launchPunch'}
+
+function M.fitVehicle(d, veh)
+  local dd = d.d
+  local b = d.base
+  if not b then
+    b = {}
+    for i = 1, #FIT do b[FIT[i]] = dd[FIT[i]] end
+    d.base = b
+  end
+  -- 0 for anything car-sized, 1 from about 12 m up (city bus, articulated lorry).
+  local heavy = ((veh and veh.length or 4.6) - 6) / 6
+  if heavy < 0 then heavy = 0 elseif heavy > 1 then heavy = 1 end
+  d.heavy = heavy
+
+  dd.maxAccel = b.maxAccel * (1 - heavy * 0.5)
+  dd.maxDecel = b.maxDecel * (1 - heavy * 0.25)
+  dd.comfortDecel = b.comfortDecel * (1 - heavy * 0.3)
+  dd.gapMin = b.gapMin + heavy * 3
+  dd.gapTime = b.gapTime * (1 + heavy * 0.35)
+  dd.speedFactor = b.speedFactor * (1 - heavy * 0.1)
+  dd.laneChangeTime = b.laneChangeTime * (1 + heavy * 0.6)
+  dd.overtakeEagerness = b.overtakeEagerness * (1 - heavy * 0.6)
+  dd.launchPunch = b.launchPunch * (1 - heavy * 0.5)
+  dd.overtaker = dd.overtakeEagerness > 0.12
+end
+
 -- ai.lua uses aggression for far more than attitude: acc_target scales with it directly
 -- (ai.lua:5109), so it sets how hard the car brakes and accelerates. Stock traffic runs at
 -- 0.35; sending values near 1 was making every stop a near-emergency stop. This maps the
@@ -127,8 +157,13 @@ function M.aggression(d)
   return a < 0.24 and 0.24 or (a > 0.72 and 0.72 or a)
 end
 
+-- Moods, grudges and intimidation all multiply in here, and stacked together they took the
+-- most aggressive drivers down to 0.2 s: glued to the bumper. Even tailgaters keep about half
+-- a second; only the deliberate push of intimidation gets under it.
 function M.headway(d)
-  return d.d.gapTime * d.stateDef.gap * (d.itm.gapMult or 1) * conditions.gapMult(d.p) * d.at.gapMult
+  local t = d.d.gapTime * d.stateDef.gap * conditions.gapMult(d.p) * d.at.gapMult
+  if t < 0.55 then t = 0.55 end
+  return t * (d.itm.gapMult or 1)
 end
 
 -- The speed this driver actually wants right now: their own factor, the weather, and a very

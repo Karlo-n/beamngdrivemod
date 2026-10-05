@@ -43,8 +43,12 @@ local function evaluate(d, ctx, pcp, gap, targetLat, need, centerLat, ourSideIsR
   local crosses = ourSideIsRight and (targetLat < centerLat) or (targetLat > centerLat)
   if crosses then
     -- Physical safety first: never pull out in front of something coming the other way.
+    -- Someone creeping up to the blockage from the other side is queuing for their own
+    -- turn, not coming through; the turn-taking below sorts the two of them out. Counting
+    -- them as oncoming had both sides wait for each other indefinitely.
     local needClear = obsGap + 25 + ctx.speed * 2
-    if pcp.oncomingGap >= 0 and pcp.oncomingGap < needClear then
+    local creeping = pcp.oncomingSpeed < 2.5 and pcp.oncomingGap > obsGap + 8
+    if pcp.oncomingGap >= 0 and pcp.oncomingGap < needClear and not creeping then
       d.sh.crossing = false
       return nil
     end
@@ -147,8 +151,12 @@ function M.update(d, ctx, pcp, dt)
     -- push and a while spent stuck behind them.
     if d.d.overtakeEagerness < 0.3 then return nil end
     if sq.waitTimer < 3 + d.p.patience * 7 then return nil end
-  elseif not (askew or damaged) and sq.waitTimer < 6 + d.p.patience * 10 then
-    return nil
+  else
+    -- Nothing moving in front of it either: not a queue, a car that has stopped in the
+    -- lane. That earns a much shorter wait than a car that might just be queuing.
+    local headOfQueue = pcp.lead2Gap < 0 or pcp.lead2Gap > obsGap + 25
+    local wait = headOfQueue and (2.5 + d.p.patience * 4) or (6 + d.p.patience * 10)
+    if not (askew or damaged) and sq.waitTimer < wait then return nil end
   end
   local myHalfW = ((ctx.veh.width or DEFAULT_W) * 0.5)
   local obsHalf = lateralHalfExtent(o.dirVec or ctx.dir, ctx.rightVec,

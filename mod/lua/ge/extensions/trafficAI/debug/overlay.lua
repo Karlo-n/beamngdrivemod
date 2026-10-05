@@ -47,7 +47,7 @@ end
 
 local stateGroup = {
   normal = 1, recovering = 1, amazed = 1, cautious = 1, tired = 1,
-  frustrated = 2, hurried = 2, distracted = 2, confused = 2, lost = 2, drowsy = 2, drunk = 2,
+  frustrated = 2, hurried = 2, distracted = 2, confused = 2, lost = 2, drowsy = 2, drunk = 2, asleep = 3,
   aggressive = 3, angry = 3,
   nervous = 4, scared = 4, panic = 4
 }

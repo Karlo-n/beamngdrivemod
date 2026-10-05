@@ -6,6 +6,7 @@ local format = string.format
 local base = require('trafficAI/behaviors/baseBehavior')
 local driver = require('trafficAI/core/driver')
 local idm = require('trafficAI/models/idm')
+local conditions = require('trafficAI/environment/conditions')
 
 local PROJECT = 0.9 -- seconds of acceleration folded into the speed we hand to ai.lua
 local SEND_EPS = 0.4 -- m/s
@@ -54,13 +55,20 @@ function M.update(d, ctx, pcp, dt)
   if d.pu.mode == 1 and d.pu.phase == 1 and leadId == d.pu.targetId then
     leadId, leadGap, leadSpeed = 0, -1, 0
   end
+  -- Asleep: nothing ahead registers and the foot stays where it was. This is how the
+  -- rear-end crashes happen; the impact is what wakes them.
+  local asleep = d.state == 'asleep'
+  if asleep then
+    leadId, leadGap, leadSpeed = 0, -1, 0
+    if v0 > v then v0 = v > 2 and v or 2 end
+  end
   -- A car that has only just become the leader is seen as it is; the lag is for changes in
   -- a speed already being watched. Carrying the old value over read as phantom braking.
   if leadId ~= cf.leaderId then cf.laggedSpeed = leadSpeed end
   cf.leaderId, cf.gap, cf.leaderSpeed = leadId, leadGap, leadSpeed
 
   -- Eyes on the road? Everything that depends on noticing something early hangs off this.
-  local alert = d.state ~= 'distracted' and d.state ~= 'drowsy' and d.state ~= 'drunk'
+  local alert = d.state ~= 'distracted' and d.state ~= 'drowsy' and d.state ~= 'drunk' and not asleep
 
   local accel
   if leadId == 0 then
@@ -197,13 +205,15 @@ function M.update(d, ctx, pcp, dt)
     -- Everyday slowing stays inside the comfort band; only a genuine emergency is allowed
     -- to reach for the tyres. Either way the deceleration builds up rather than appearing.
     -- The comfort level and how abruptly braking starts are the driver's own style.
-    local ceiling = emergency and GRIP_DECEL or dd.comfortDecel
+    -- Wet tarmac has less to give before the tyres lock.
+    local grip = GRIP_DECEL * conditions.grip
+    local ceiling = emergency and grip or dd.comfortDecel
     local jerkRate = emergency and JERK_EMERGENCY or dd.brakeJerk
     -- Seen late, or closing faster than comfort can deal with: brake as hard as it takes
     -- and no harder, rather than staying gentle until it becomes an emergency.
     if not emergency and need > ceiling then
       ceiling = need * 1.15
-      if ceiling > GRIP_DECEL then ceiling = GRIP_DECEL end
+      if ceiling > grip then ceiling = grip end
       jerkRate = jerkRate * 2
     end
     local wantDecel = b * urgency

@@ -71,11 +71,7 @@ function M.derive(p, s)
     launchDelay = 0.25 + (1 - s.reflexes) * 1.3 + random() * 0.5,
     launchPunch = 1 + p.aggression * 1.4 + p.confidence * 0.4,
 
-    -- Slow drift within the lane, and a slow drift in chosen cruising speed.
-    -- Real drivers sit near the middle of their lane. The variation is centimetres, not
-    -- half a lane: a standing personal bias plus a slow, small drift on top of it.
-    laneBias = (random() - 0.5) * (0.16 + (1 - s.control) * 0.16),
-    wanderAmp = 0.03 + (1 - s.control) * 0.08 + (1 - s.perception) * 0.04,
+    -- Pace of the weave when drunk, and a slow drift in chosen cruising speed.
     wanderRate = 0.25 + random() * 0.5,
     wanderPhase = random() * 6.28,
     speedDriftAmp = 0.02 + (1 - s.control) * 0.05,
@@ -88,6 +84,10 @@ function M.derive(p, s)
     errandChance = 0.02 + random() * 0.06,
     -- Some people stamp on the brakes the moment they hear a siren; most just move over.
     sirenBraker = random() < 0.3 + p.prudence * 0.4,
+    -- Lights on when the rain or fog comes in, and a burst of hazards to warn the cars behind
+    -- of a queue appearing at speed. Both habits, so the same drivers always do them.
+    weatherLights = random() < 0.6 + p.prudence * 0.35,
+    warnsQueue = random() < 0.2 + p.prudence * 0.35 + s.experience * 0.25,
     -- Whether they bother with the indicator at all. Plenty of people simply do not.
     indicates = random() < 0.35 + s.experience * 0.35 + p.prudence * 0.25,
     -- Whether they wait their turn at a blocked single lane, and how long before impatience

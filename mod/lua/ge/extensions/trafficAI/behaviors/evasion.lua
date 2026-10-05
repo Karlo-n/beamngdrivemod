@@ -45,7 +45,7 @@ function M.update(d, ctx, pcp, dt)
   ev.speedCap = -1
 
   local ttc = pcp.threatTtc
-  if pcp.threatId == 0 or ttc < 0 or not ctx.valid then
+  if pcp.threatId == 0 or ttc < 0 or not ctx.valid or d.state == 'asleep' then
     ev.level, ev.active, ev.delay = M.NONE, false, 0
     return nil
   end

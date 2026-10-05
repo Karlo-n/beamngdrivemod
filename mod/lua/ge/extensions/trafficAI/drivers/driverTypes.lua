@@ -18,7 +18,7 @@ local defs = {
    p = {patience = {0.6, 0.95}, aggression = {0.02, 0.25}, prudence = {0.6, 0.9}, confidence = {0.1, 0.4}, temper = {0.05, 0.35}, horn = {0.02, 0.25}, beams = {0, 0.15}, ragebait = {0, 0.02}},
    s = {reflexes = {0.2, 0.5}, control = {0.3, 0.6}, perception = {0.3, 0.6}, decision = {0.3, 0.6}, area = {0.3, 0.8}}},
 
-  {id = 'normal', label = 'Normal Driver', w = 22, p = {}, s = {}},
+  {id = 'normal', label = 'Normal Driver', w = 12, p = {}, s = {}},
 
   {id = 'aggressive', label = 'Aggressive Driver', w = 9,
    p = {patience = {0.05, 0.35}, aggression = {0.65, 0.98}, prudence = {0.1, 0.4}, confidence = {0.6, 0.95}, tolerance = {0.05, 0.35}, temper = {0.6, 0.95}, horn = {0.3, 0.9}, beams = {0.2, 0.85}, ragebait = {0.05, 0.5}},

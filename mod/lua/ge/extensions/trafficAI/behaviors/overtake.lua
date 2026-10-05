@@ -7,6 +7,7 @@ local base = require('trafficAI/behaviors/baseBehavior')
 local perception = require('trafficAI/environment/perception')
 local driver = require('trafficAI/core/driver')
 local mobil = require('trafficAI/models/mobil')
+local conditions = require('trafficAI/environment/conditions')
 
 M.IDLE, M.PULLOUT, M.PASS, M.RETURN, M.ABORT = 0, 1, 2, 3, 4
 
@@ -17,10 +18,25 @@ local PASS_TIMEOUT = 19
 local BOOST = 1.18
 local BOOST_CAUTIOUS = 1.05 -- taken on geometry alone, so taken gently
 
-local function abort(d, reason)
+-- Backing out drops in behind the car we were passing, a little slower than them. Braking to
+-- a fraction of our own speed was a stamp on the pedal in the middle of the road.
+local function abort(d, ctx, reason)
   local ot = d.ot
+  local _, _, theirSpeed = perception.relativeTo(ctx, ot.targetId)
   ot.phase, ot.timer, ot.reason = M.ABORT, 3.5, reason
   ot.ignoreId, ot.speedBoost = 0, 1
+  ot.abortCap = theirSpeed and theirSpeed * 0.85 or ctx.speed * 0.8
+end
+
+-- Clear road still needed to finish from where we are now. Comparing the live oncoming gap
+-- against the figure needed at the start aborted half the passes that were going fine: the
+-- gap shrinks as the pass progresses, and so does what is left to do.
+local function remainingNeed(ctx, fwd, theirSpeed, oncomingSpeed)
+  local togo = fwd + (ctx.veh.length or 4.6) + 3
+  if togo < 0 then return 0 end
+  local closing = max(1.5, ctx.speed - (theirSpeed or 0))
+  local t = togo / closing
+  return (ctx.speed + oncomingSpeed) * t + 15
 end
 
 -- Distance of clear oncoming lane this pass actually needs: our travel while alongside,
@@ -28,7 +44,8 @@ end
 local function clearanceNeeded(d, ctx, pcp)
   local v0 = driver.desiredSpeed(d, ctx.limit) * BOOST
   local closing = max(1.5, v0 - pcp.leadSpeed)
-  local tPass = (pcp.leadGap + 14) / closing
+  -- Both cars' real lengths: getting past a bus takes a lot more road than past a hatchback.
+  local tPass = (pcp.leadGap + (ctx.veh.length or 4.6) + (pcp.leadLen or 4.6) + 5) / closing
   local oncomingSpeed = pcp.oncomingGap >= 0 and pcp.oncomingSpeed or ctx.limit
   return v0 * tPass + oncomingSpeed * tPass + 10 + d.p.prudence * 14, tPass
 end
@@ -44,7 +61,7 @@ function M.update(d, ctx, pcp, dt)
 
   if ot.phase == M.ABORT then
     ot.timer = ot.timer - dt
-    ot.speedCap = ctx.speed * 0.6
+    ot.speedCap = ot.abortCap
     base.lateralHold(ctx, ot.homeOffset, ctx.laneWidth + 1)
     if ot.timer <= 0 then
       ot.phase, ot.cooldown, ot.cautious = M.IDLE, 8 + random() * 10, false
@@ -55,27 +72,44 @@ function M.update(d, ctx, pcp, dt)
 
   if ot.phase == M.PULLOUT or ot.phase == M.PASS then
     ot.timer = ot.timer - dt
-    local fwd = perception.relativeTo(ctx, ot.targetId)
-
-    -- Someone appeared in the lane we borrowed: get back and slow down, now. Only matters
-    -- when the borrowed lane is the oncoming one.
-    if ot.usingOncoming and pcp.oncomingGap >= 0 and pcp.oncomingGap < ot.needClear * 0.55 then
-      abort(d, 'oncoming')
-      return 'overtaking'
-    end
+    local fwd, _, theirSpeed = perception.relativeTo(ctx, ot.targetId)
     if ot.timer <= 0 or not fwd then
-      abort(d, 'timeout')
+      abort(d, ctx, 'timeout')
       return 'overtaking'
     end
 
-    ot.ignoreId, ot.speedBoost = ot.targetId, ot.cautious and BOOST_CAUTIOUS or BOOST
+    -- Someone appeared in the lane we borrowed. Already more than half past: finish and tuck
+    -- in, which is what anyone does. Otherwise drop back behind them.
+    if ot.usingOncoming and pcp.oncomingGap >= 0
+      and pcp.oncomingGap < remainingNeed(ctx, fwd, theirSpeed, pcp.oncomingSpeed) then
+      if fwd < 0 then
+        ot.phase, ot.timer, ot.signalled = M.RETURN, 3, false
+      else
+        abort(d, ctx, 'oncoming')
+      end
+      return 'overtaking'
+    end
+
     base.lateralHold(ctx, ot.targetOffset, ctx.laneWidth + 1)
+
+    -- Until the car is actually out of the lane, the one in front is still in front. Ignoring
+    -- it from the first tick drove the car at its bumper, and the stock AI then braked: that
+    -- was the lunge, brake, lunge cycle behind slow cars.
+    local span = ot.targetOffset - ot.homeOffset
+    local progress = span ~= 0 and (ctx.roadOffset - ot.homeOffset) / span or 1
+    if progress > 0.55 then
+      ot.phase = M.PASS
+    elseif ot.phase == M.PULLOUT and ot.timer < PASS_TIMEOUT - d.d.laneChangeTime * 2.5 then
+      abort(d, ctx, 'no sale')
+      return 'overtaking'
+    end
+    if ot.phase == M.PASS then
+      ot.ignoreId, ot.speedBoost = ot.targetId, ot.cautious and BOOST_CAUTIOUS or BOOST
+    end
 
     -- Clear of them by more than a car length: time to tuck back in.
     if fwd < -(ctx.veh.length or 4.6) - 3 then
       ot.phase, ot.timer, ot.signalled = M.RETURN, 4, false
-    else
-      ot.phase = M.PASS
     end
     return 'overtaking'
   end
@@ -98,6 +132,7 @@ function M.update(d, ctx, pcp, dt)
 
   -- Idle from here on: decide whether to start one.
   if not dd.overtaker then ot.reject = 'nunca adelanta' ot.urge = 0 return nil end
+  if d.state == 'asleep' then return nil end
   if ot.cooldown > 0 then ot.reject = 'en espera' return nil end
   if not ctx.valid then ot.reject = 'sin datos de via' ot.urge = 0 return nil end
 
@@ -128,7 +163,6 @@ function M.update(d, ctx, pcp, dt)
   ot.usingOncoming = (ctx.ourLanes == 1)
   ot.homeOffset = ctx.laneCenter
   ot.targetOffset = ctx.laneCenter + side * ctx.laneWidth
-  ot.ignoreId, ot.speedBoost = pcp.leadId, BOOST
   ot.signalled = false
   if dd.indicates then base.signal(ctx, side) end
   base.lateralHold(ctx, ot.targetOffset, ctx.laneWidth + 1)
@@ -234,8 +268,9 @@ function M.chooseSide(d, ctx, pcp)
     return nil
   end
 
+  -- Fog and darkness shorten how much empty road anyone can honestly vouch for.
   local need = clearanceNeeded(d, ctx, pcp)
-  if need > MAX_VERIFIABLE then
+  if need > MAX_VERIFIABLE * conditions.visibility then
     ot.reject = string.format('hace falta %.0fm de via', need)
     return nil
   end
@@ -249,7 +284,7 @@ end
 function M.reset(d)
   local ot = d.ot
   ot.phase, ot.targetId, ot.timer, ot.cooldown, ot.urge = M.IDLE, 0, 0, 0, 0
-  ot.speedCap, ot.speedBoost, ot.ignoreId = -1, 1, 0
+  ot.speedCap, ot.speedBoost, ot.ignoreId, ot.abortCap = -1, 1, 0, -1
   ot.homeOffset, ot.targetOffset, ot.needClear = 0, 0, 0
   ot.usingOncoming, ot.cautious, ot.signalled = false, false, false
   ot.reason, ot.reject = '', ''

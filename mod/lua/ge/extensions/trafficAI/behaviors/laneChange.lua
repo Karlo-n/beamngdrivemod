@@ -108,23 +108,38 @@ function M.update(d, ctx, pcp, dt)
     lc.keepRight = dd.laneDiscipline
   end
 
-  if lc.urge < dd.patienceDelay then return nil end
-  if ctx.ourLanes < 2 or ctx.laneIdx <= 0 then return nil end
+  -- A stopped car in our lane is not something to sit behind, whoever is driving. The way
+  -- round is whichever lane exists, inner first; the outer one is fine for this. A queue at
+  -- a light is not that: nothing ahead of the stopped car, and no red in sight, is.
+  local redAhead = pcp.signalDist >= 0 and pcp.signalDist < 60
+    and (pcp.signalAction == 2 or pcp.signalAction == 3 or pcp.signalAction == 4)
+  local headOfQueue = pcp.lead2Gap < 0 or pcp.lead2Gap > pcp.leadGap + 25
+  local stopped = blocked and pcp.obstacleId ~= 0 and pcp.obstacleId == pcp.leadId
+    and not redAhead and headOfQueue
+  local wait = stopped and (dd.patienceDelay < 2.5 and dd.patienceDelay or 2.5) or dd.patienceDelay
+  if lc.urge < wait or ctx.ourLanes < 2 or d.state == 'asleep' then return nil end
 
-  lc.phase = M.CHECK
-  perception.senseTargetLane(ctx, d, -ctx.sideSign * ctx.laneWidth)
-
-  local safe = targetLaneSafe(ctx, d, pcp)
-  d.pm.tgtSafe = safe and 1 or 0
-  if not safe then return nil end
-
-  lc.phase = M.EXEC
-  lc.timer = dd.laneChangeTime
-  lc.side = -ctx.sideSign
-  lc.targetOffset = ctx.roadOffset - ctx.sideSign * ctx.laneWidth
-  if dd.indicates then base.signal(ctx, lc.side) end
-  issue(ctx, lc)
-  return 'laneChange'
+  local sides = 0
+  if ctx.laneIdx > 0 then sides = -ctx.sideSign end
+  for pass = 1, 2 do
+    local side = pass == 1 and sides or (stopped and ctx.laneIdx < ctx.ourLanes - 1 and ctx.sideSign or 0)
+    if side ~= 0 then
+      lc.phase = M.CHECK
+      perception.senseTargetLane(ctx, d, side * ctx.laneWidth)
+      local safe = targetLaneSafe(ctx, d, pcp)
+      d.pm.tgtSafe = safe and 1 or 0
+      if safe then
+        lc.phase = M.EXEC
+        lc.timer = dd.laneChangeTime
+        lc.side = side
+        lc.targetOffset = ctx.laneCenter + side * ctx.laneWidth
+        if dd.indicates then base.signal(ctx, lc.side) end
+        issue(ctx, lc)
+        return 'laneChange'
+      end
+    end
+  end
+  return nil
 end
 
 function M.reset(d)

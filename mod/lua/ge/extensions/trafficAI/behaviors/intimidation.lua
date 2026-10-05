@@ -13,7 +13,8 @@ function M.update(d, ctx, pcp, dt)
   local itm = d.itm
   itm.speedCap, itm.gapMult = -1, 1
 
-  local hostile = d.state == 'angry' or d.state == 'aggressive' or d.frustration > 0.85
+  local hostile = d.state == 'angry' or d.state == 'aggressive'
+    or (d.frustration > 0.85 and d.p.ragebait > 0.25)
   local willing = d.p.ragebait > 0.15 or d.p.aggression > 0.7
   if not hostile or not willing or pcp.leadId == 0 or units.isEmergency(pcp.leadId) then
     itm.active, itm.phase, itm.timer = false, 0, 0
@@ -29,9 +30,9 @@ function M.update(d, ctx, pcp, dt)
   itm.timer = itm.timer - dt
   if itm.timer <= 0 then
     if itm.phase == M.PUSH then
-      itm.phase, itm.timer = M.BACK, 0.8 + random() * 1.6
+      itm.phase, itm.timer = M.BACK, 3 + random() * 4
     else
-      itm.phase, itm.timer = M.PUSH, 1.2 + random() * 2.0
+      itm.phase, itm.timer = M.PUSH, 3 + random() * 4
     end
   end
   itm.active, itm.targetId = true, pcp.leadId
@@ -47,12 +48,13 @@ function M.update(d, ctx, pcp, dt)
     end
   end
 
+  -- Only the gap moves; the car-following model gets there smoothly. A speed cap on the way
+  -- back was a brake jab every couple of seconds, which read as a car that could not decide
+  -- whether to pass.
   if itm.phase == M.PUSH then
-    -- Collapse the following distance well inside what this driver would normally keep.
-    itm.gapMult = 0.30 + (1 - d.p.aggression) * 0.25
+    itm.gapMult = 0.65 + (1 - d.p.aggression) * 0.2
   else
-    itm.gapMult = 1.6
-    itm.speedCap = pcp.leadSpeed * 0.85
+    itm.gapMult = 1.3
   end
 
   return 'intimidate'

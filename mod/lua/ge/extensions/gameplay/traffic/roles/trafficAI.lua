@@ -468,6 +468,41 @@ function C:maybeHonk(d, blocked, pcp, tickTime)
   end
 end
 
+-- Small things drivers do because of the conditions, not because of another driver.
+function C:updateEnvironment(d, ctx, pcp, tickTime)
+  local veh = self.veh
+  d.envTimer = (d.envTimer or 0) - tickTime
+  if d.envTimer <= 0 then
+    d.envTimer = 4 + random() * 4
+    -- Stock traffic only puts the lights on after dark. In rain or fog most people switch
+    -- them on too; some never think to. Only lights this role switched on are switched off.
+    local murky = conditions.rain > 0.3 or conditions.fog > 0.3
+    if murky and d.d.weatherLights and not veh.headlights then
+      veh.headlights, d.weatherLit = true, true
+      base.send(veh.id, 'electrics.setLightsState(1)')
+    elseif not murky and d.weatherLit and not conditions.night then
+      veh.headlights, d.weatherLit = false, false
+      base.send(veh.id, 'electrics.setLightsState(0)')
+    end
+  end
+
+  -- Coming up fast on a queue that has stopped: a few seconds of hazards for whoever is
+  -- behind. Common practice on fast roads, and only with someone actually behind to warn.
+  d.queueWarn = (d.queueWarn or 0) - tickTime
+  -- Off again before stopping: hazards on a standing car tell everyone behind it is broken
+  -- down, and they would start going round a perfectly ordinary queue.
+  if d.queueHazOn and (ctx.speed < 4 or d.queueWarn < 34) then
+    d.queueHazOn = false
+    veh.queuedFuncs.taiQueueHaz = nil
+    base.send(veh.id, 'electrics.set_warn_signal(0)')
+  end
+  if d.queueWarn <= 0 and d.d.warnsQueue and ctx.speed > 19 and pcp.leadId ~= 0
+    and pcp.leadSpeed < 4 and pcp.leadGap >= 0 and pcp.leadGap < 90 and pcp.rearId ~= 0 then
+    d.queueWarn, d.queueHazOn = 40, true
+    base.send(veh.id, 'electrics.set_warn_signal(1)')
+  end
+end
+
 function C:onRefresh()
   self.targetId = nil
   self.actionTimer = 0
@@ -475,6 +510,7 @@ function C:onRefresh()
   if not self.d then return end
 
   local d = self.d
+  driver.fitVehicle(d, self.veh)
   d.sentAgg = -1
   d.frustration = 0
   attitude.reset(d)
@@ -615,6 +651,7 @@ function C:onTrafficTick(tickTime)
 
   self:syncAggression()
   self:maybeHonk(d, blocked, pcp, tickTime)
+  self:updateEnvironment(d, ctx, pcp, tickTime)
 
   stateMachine.updateManeuver(d, tickTime)
   -- Evasion outranks everything, then squeezing past an obstacle. Both run before the
@@ -630,7 +667,9 @@ function C:onTrafficTick(tickTime)
 
   -- Sitting still for a while means our speed cap is the thing holding the car in place.
   -- Hand control back so the stock avoidance and routing can get it out.
-  if self.veh.speed < 0.5 and blocked and not squeezing and not evading and not yielding then
+  -- A lane change already under way is the way out, so it does not count as stuck.
+  if self.veh.speed < 0.5 and blocked and not squeezing and not evading and not yielding
+    and d.lc.phase ~= laneChange.EXEC then
     d.stuckTimer = d.stuckTimer + tickTime
   else
     d.stuckTimer = 0

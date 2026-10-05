@@ -124,7 +124,8 @@ function M.update(d, ctx, pcp, dt)
   -- Shortens how long they will sit behind someone before trying to pass.
   at.urge = clamp(at.pressure * 0.3 + (hot > 0.55 and at.stress * 0.2 or 0), 0, 0.5)
 
-  -- ---- mood follows
+  -- ---- mood follows. Someone asleep feels none of it until they wake.
+  if d.state == 'asleep' then return end
   if d.frustration >= 0.75 and p.temper >= 0.6 then
     stateMachine.escalate(d, 'frustrated')
   end
@@ -156,16 +157,29 @@ function M.episodes(d, ctx, pcp, dt)
 
   ep.timer = ep.timer - dt
   if ep.timer > 0 then return end
-  ep.timer = 22 + random() * 50
+  ep.timer = 30 + random() * 60
   if ctx.speed < 1 and d.state ~= 'normal' then return end
 
-  -- Nodding off: at night, on a driver who set out tired.
-  if conditions.night and (d.mood == 'tired' or d.state == 'tired') and random() < 0.3 then
-    stateMachine.escalate(d, 'drowsy', 4 + random() * 6)
+  -- Microsleep. Already drowsy, at a steady cruise on an open road: that is when it happens.
+  -- Rare, and the driver stays under until a horn, the lane edge or a crash brings them round.
+  if d.state == 'drowsy' then
+    if ctx.speed > 12 and random() < 0.15 then stateMachine.set(d, 'asleep') end
+    ep.timer = 5 + random() * 8
     return
   end
-  -- Eyes off the road. Short, and far more often for some drivers than others.
-  if random() < dd.distractible * 0.55 then
+  -- Nodding off: at night, on a driver who set out tired. Monotony on a fast road gets to
+  -- the odd daytime driver too.
+  local sleepy = conditions.night and (d.mood == 'tired' or d.state == 'tired') and random() < 0.3
+    or (ctx.speed > 20 and random() < 0.015)
+  if sleepy then
+    stateMachine.escalate(d, 'drowsy', 15 + random() * 20)
+    ep.timer = 5 + random() * 8 -- soon enough to catch them while still drowsy
+    return
+  end
+  -- Eyes off the road. Short, and far more often for some drivers than others; the
+  -- distracted type is where most of these come from.
+  local chance = dd.distractible * (d.typeId == 'distracted' and 0.6 or 0.2)
+  if random() < chance then
     stateMachine.escalate(d, 'distracted', 3 + random() * 4.5)
   end
 end

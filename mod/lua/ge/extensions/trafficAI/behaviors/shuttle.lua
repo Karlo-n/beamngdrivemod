@@ -16,6 +16,7 @@ M.zones = {}
 M.count = 0
 local clock = 0
 local ASK_WINDOW = 1.5   -- a side counts as queued if anyone asked within this long
+local PASS_LIFE = 15     -- nobody takes longer than this to get past one blockage
 
 local function key(pos)
   return floor(pos.x / CELL) .. ':' .. floor(pos.y / CELL)
@@ -59,6 +60,15 @@ function M.update(dt)
       M.count = M.count - 1
     else
       z.timer = z.timer - dt
+      -- A car that went off the far end, was recycled, or dropped out of the full update
+      -- never says it is done, and one stale entry held the right of way for good.
+      for id, t in pairs(z.passing) do
+        if clock - t > PASS_LIFE or not (map.objects and map.objects[id]) then
+          z.passing[id] = nil
+          z.passCount = z.passCount - 1
+        end
+      end
+      if z.passCount < 0 then z.passCount = 0 end
       -- Safety valve: whatever the state, nobody queues at a blockage for half a minute.
       z.stuck = (z.stuck or 0) + dt
       if z.stuck > 25 then
@@ -103,7 +113,7 @@ function M.mayCross(d, ctx, obstaclePos)
   if z.holder == side then
     z.lastAsk[side] = clock
     if not z.passing[ctx.id] then
-      z.passing[ctx.id] = true
+      z.passing[ctx.id] = clock
       z.passCount = z.passCount + 1
     end
     sh.waitTime, sh.zone = 0, k
@@ -117,7 +127,7 @@ function M.mayCross(d, ctx, obstaclePos)
   -- Nobody holds it and nobody is crossing: first to arrive simply goes.
   if z.holder == 0 and z.passCount == 0 then
     z.holder, z.timer = side, GREEN
-    z.passing[ctx.id] = true
+    z.passing[ctx.id] = clock
     z.passCount = 1
     sh.waitTime = 0
     return true

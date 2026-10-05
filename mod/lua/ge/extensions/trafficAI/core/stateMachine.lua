@@ -17,6 +17,9 @@ local S = {
   frustrated = {pri = 3, spd = 1.03, agg = 0.10,  gap = 0.85, react = 0.95, next = 'normal',     dur = {6, 18}},
   hurried    = {pri = 3, spd = 1.06, agg = 0.25,  gap = 0.75, react = 0.95, next = 'normal',     dur = {20, 60}},
   drowsy     = {pri = 3, spd = 0.92, agg = -0.10, gap = 1.15, react = 1.80, next = 'tired',      dur = {15, 40}},
+  -- Nodded off at the wheel. Nothing in the timer wakes them early: a horn, the rumble of the
+  -- lane edge or an impact does (driving.lua). The timer is only the long tail.
+  asleep     = {pri = 3, spd = 1.00, agg = 0,     gap = 1.00, react = 3.00, next = 'scared',     dur = {12, 20}},
   drunk      = {pri = 3, spd = 0.96, agg = 0.10,  gap = 0.90, react = 1.70, next = 'drunk',      dur = {60, 180}},
   nervous    = {pri = 4, spd = 0.90, agg = -0.15, gap = 1.35, react = 1.10, next = 'cautious',   dur = {6, 20}},
   aggressive = {pri = 5, spd = 1.08, agg = 0.20,  gap = 0.70, react = 0.90, next = 'recovering', dur = {8, 20}},
