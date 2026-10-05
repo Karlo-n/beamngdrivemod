@@ -10,6 +10,7 @@ local spikes = require('trafficAI/behaviors/spikes')
 local units = require('trafficAI/util/units')
 local holds = require('trafficAI/util/holds')
 local missions = require('trafficAI/missions')
+local emergency = require('trafficAI/environment/emergency')
 local radio = require('trafficAI/radio')
 
 local NEAR = 45
@@ -101,18 +102,23 @@ local function classify(id)
   return 'none'
 end
 
--- Nearest other vehicle in front of the player, which is what any of these actions act on.
+-- Nearest other vehicle, favouring the one in front: that is the car an officer is looking
+-- at. Other service vehicles are colleagues, not suspects, so they are never picked.
 local function nearest()
   local playerId = be:getPlayerVehicleID(0)
   local objects = map.objects
   local me = objects and objects[playerId]
   if not me or not me.pos then return nil end
 
-  local best, bestD = nil, NEAR_SQ
+  local best, bestScore = nil, 1e18
   for id, o in pairs(objects) do
-    if id ~= playerId and o.pos then
+    if id ~= playerId and o.pos and not units.isEmergency(id) then
       local d = o.pos:squaredDistance(me.pos)
-      if d < bestD then best, bestD = id, d end
+      if d < NEAR_SQ then
+        local ahead = me.dirVec and (o.pos - me.pos):dot(me.dirVec) > 0
+        local score = ahead and d or d * 2.5
+        if score < bestScore then best, bestScore = id, score end
+      end
     end
   end
   return best
@@ -306,28 +312,18 @@ function M.arrest()
   M.push()
 end
 
+-- 'traffic' mode wanders and ignores ai.setTarget, so backup used to light up and drive off
+-- somewhere else for good. The incident dispatch drives there in 'manual' mode, parks at the
+-- kerb on arrival and hands the unit back to traffic after a while.
 function M.callBackup()
-  local data = traffic()
-  local police = gameplay_police and gameplay_police.getPoliceVehicles
-    and gameplay_police.getPoliceVehicles()
-  if not data or not police then return end
-  local me = data[be:getPlayerVehicleID(0)]
+  local me = map.objects and map.objects[be:getPlayerVehicleID(0)]
   if not me or not me.pos then return end
-
-  local n1 = map.findClosestRoad and map.findClosestRoad(me.pos)
   local sent = 0
-  for pid in pairs(police) do
-    local v = data[pid]
-    if v and units.ai(v) and v.state == 'active' and n1 and sent < 2 then
-      v:setAiMode('traffic')
-      send(pid, format('ai.setTarget(%q)', n1))
-      send(pid, 'ai.setAvoidCars("on")')
-      send(pid, 'ai.driveInLane("on")')
-      send(pid, 'electrics.set_lightbar_signal(2)')
-      sent = sent + 1
-    end
+  for _ = 1, 2 do
+    if emergency.requestPatrol(vec3(me.pos)) then sent = sent + 1 end
   end
-  note(sent > 0 and format('%d unidad(es) en camino.', sent) or 'Sin unidades disponibles.')
+  note(sent > 0 and format('Central: %d unidad(es) en camino a tu posicion.', sent)
+    or 'Central: sin unidades disponibles.')
   M.push()
 end
 
@@ -337,8 +333,18 @@ function M.deploySpikes()
   M.push()
 end
 
-local BREATH = {'negativo', 'negativo', 'negativo', 'negativo',
-                '0.28 mg/l, positivo', '0.41 mg/l, positivo', 'se niega a soplar'}
+-- The result comes from the driver, not a dice table that had two sober drivers in seven
+-- blowing positive. Someone the traffic model made drunk is drunk; almost nobody else is.
+local function breathOf(id)
+  local d = trafficAI_main and trafficAI_main.getDriver and trafficAI_main.getDriver(id)
+  local h = (id * 40503) % 1000
+  if d and (d.drunk or d.state == 'drunk') then
+    return format('%.2f mg/l, positivo', 0.30 + (h % 60) / 100)
+  end
+  if h < 25 then return 'se niega a soplar' end
+  if h < 45 then return format('%.2f mg/l, por debajo del limite', 0.05 + (h % 15) / 100) end
+  return 'negativo'
+end
 
 function M.breathTest()
   if M.targetId == 0 then M.selectNearest() end
@@ -351,7 +357,7 @@ function M.breathTest()
     M.push()
     return
   end
-  local r = missions.breathResult(M.targetId) or BREATH[((M.targetId * 40503) % #BREATH) + 1]
+  local r = missions.breathResult(M.targetId) or breathOf(M.targetId)
   note(format('Prueba de alcoholemia: %s.', r))
   missions.onAction('breath', M.targetId)
   M.push()
@@ -479,8 +485,13 @@ function M.transport()
 end
 
 function M.requestUnit(kind)
-  note(kind == 'fire' and 'Solicitados bomberos.'
-    or (kind == 'medic' and 'Solicitada asistencia sanitaria.' or 'Solicitado apoyo policial.'))
+  local me = map.objects and map.objects[be:getPlayerVehicleID(0)]
+  if not me or not me.pos then return end
+  local id = emergency.requestService(kind == 'fire' and emergency.FIRE or emergency.AMBULANCE,
+    vec3(me.pos))
+  local who = kind == 'fire' and 'bomberos' or 'asistencia sanitaria'
+  note(id and format('Central: %s en camino.', who)
+    or format('Central: sin %s disponibles en la zona.', who))
   M.push()
 end
 

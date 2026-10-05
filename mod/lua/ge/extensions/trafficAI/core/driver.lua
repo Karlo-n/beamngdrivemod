@@ -10,6 +10,30 @@ local conditions = require('trafficAI/environment/conditions')
 
 local MEM_SIZE = 6
 
+-- A trip has a mood of its own. Two identical drivers behave differently when one of them
+-- is late, which is what stops a road full of "normal" drivers looking like clones. Rolled
+-- again on every respawn: a recycled car is somebody else's journey.
+function M.rollTrip(d)
+  d.mood = 'none'
+  -- The clock shifts the mix: commuters running late at rush hour, tired people in the
+  -- small hours, and drink mostly after midnight.
+  local h = conditions.hour
+  local smallHours = h < 5
+  local hurried = conditions.rushHour() and 0.26 or 0.10
+  local relaxed = hurried + (conditions.rushHour() and 0.10 or 0.18)
+  local tired = relaxed + (smallHours and 0.25 or (conditions.night and 0.14 or 0))
+  local r = math.random()
+  if r < hurried then
+    d.mood = 'hurried'
+  elseif r < relaxed then
+    d.mood = 'relaxed'
+  elseif r < tired then
+    d.mood = 'tired'
+  end
+  if d.mood == 'hurried' then d.at.pressure = 0.4 end
+  d.drunk = conditions.night and math.random() < (smallHours and 0.03 or 0.01)
+end
+
 function M.new(id, typeId)
   local t = (typeId and types.get(typeId)) or types.random()
   local p = personalities.generate(t)
@@ -36,7 +60,7 @@ function M.new(id, typeId)
           cmdSpeed = -1, released = false, launchWait = 0, launchBoost = 0, lastDecel = 0},
     lc = {phase = 0, timer = 0, cooldown = 0, urge = 0, side = 0, targetOffset = 0,
           keepRight = 0, tightRear = false},
-    rs = {state = 0, timer = 0, reason = ''},
+    rs = {state = 0, timer = 0, reason = '', hazards = false},
     sh = {zone = nil, waitTime = 0, jumped = false, crossing = false},
     pm = perception.newMemory(),
     clock = 0,
@@ -98,20 +122,7 @@ function M.new(id, typeId)
 
   d.dr.wanderRate, d.dr.wanderPhase = d.d.wanderRate, d.d.wanderPhase
 
-  -- A trip has a mood of its own. Two identical drivers behave differently when one of them
-  -- is late, which is what stops a road full of "normal" drivers looking like clones.
-  local r = math.random()
-  if r < 0.12 then
-    d.mood = 'hurried'
-  elseif r < 0.28 then
-    d.mood = 'relaxed'
-  elseif conditions.night and r < 0.42 then
-    d.mood = 'tired'
-  end
-  if d.mood == 'hurried' then d.at.pressure = 0.4 end
-  -- Rare, and only after dark.
-  d.drunk = conditions.night and math.random() < 0.012
-
+  M.rollTrip(d)
   return d
 end
 

@@ -142,7 +142,11 @@ function C:updateRoadsideStop(d, ctx, tickTime)
 
   if rs.state == 1 then
     if rs.timer > 0 then return true end
-    rs.state, rs.timer = 0, 90 + random() * 240
+    rs.state, rs.timer = 0, d.isBus and (40 + random() * 60) or (90 + random() * 240)
+    if rs.hazards then
+      rs.hazards = false
+      base.send(self.veh.id, 'electrics.set_warn_signal(0)')
+    end
     self:leaveKerb()
     self:resetAction()
     stateMachine.set(d, 'normal')
@@ -150,22 +154,46 @@ function C:updateRoadsideStop(d, ctx, tickTime)
   end
 
   if rs.timer > 0 then return false end
-  rs.timer = 45 + random() * 150
+  rs.timer = d.isBus and (40 + random() * 60) or (45 + random() * 150)
   if d.crashState > 0 or not ctx.valid or ctx.speed < 5 then return false end
   if ctx.ourLanes > 1 and ctx.laneIdx < ctx.ourLanes - 1 then return false end
-  if random() > d.d.errandChance then return false end
+
+  -- Who stops, and why. A city bus works its stops; a delivery van in town stops wherever
+  -- the drop is, shoulder or not; in a real downpour the careful ones wait it out.
+  local urban = ctx.limit > 0 and ctx.limit <= 17
+  local bus = d.isBus and urban
+  local delivery = d.typeId == 'delivery' and urban
+  local downpour = conditions.rain > 0.8
+  local chance = bus and 0.6 or (delivery and 0.25 or d.d.errandChance)
+  if downpour then chance = chance + d.p.prudence * 0.1 end
+  if random() > chance then return false end
+
   -- Only where there is a shoulder to stop on. 0.8 m of room is exactly what an ordinary
-  -- 3.5 m lane has, so that test let cars stop in the middle of a live lane.
-  if self:kerbShift() < 1.8 then return false end
+  -- 3.5 m lane has, so that test let cars stop in the middle of a live lane. Buses and
+  -- delivery vans are the exception everyone knows: they stop in the lane and you go round.
+  local shoulder = self:kerbShift() >= 1.8
+  if not shoulder and not (bus or delivery) then return false end
 
   -- Stopping right by a petrol station reads as filling up, and people linger longer there.
-  local fuelling = places.nearStation(self.veh.pos)
+  local fuelling = not bus and places.nearStation(self.veh.pos)
   rs.state = 1
-  rs.timer = fuelling and (45 + random() * 70) or (14 + random() * 55)
-  rs.reason = fuelling and 'gasolinera' or 'recado'
+  if bus then
+    rs.timer, rs.reason = 10 + random() * 18, 'parada de bus'
+  elseif fuelling then
+    rs.timer, rs.reason = 45 + random() * 70, 'gasolinera'
+  elseif delivery and not shoulder then
+    rs.timer, rs.reason = 20 + random() * 35, 'reparto en doble fila'
+  elseif downpour then
+    rs.timer, rs.reason = 30 + random() * 60, 'esperando que amaine'
+  else
+    rs.timer, rs.reason = 14 + random() * 55, delivery and 'reparto' or 'recado'
+  end
   self.state = 'pullOver'
   self.flags.pullOver = 1
   self:parkAtKerb(true)
+  -- Stopped where nobody expects a car to stop: hazards, so the cars behind know to go round.
+  rs.hazards = (delivery and not shoulder) or downpour
+  if rs.hazards then self:setHazards() end
   return true
 end
 
@@ -527,6 +555,10 @@ function C:onRefresh()
 
   local d = self.d
   driver.fitVehicle(d, self.veh)
+  driver.rollTrip(d)
+  local vobj = getObjectByID(self.veh.id)
+  local pc = vobj and type(vobj.partConfig) == 'string' and string.lower(vobj.partConfig) or ''
+  d.isBus = (d.heavy or 0) > 0.4 and string.find(pc, 'bus', 1, true) ~= nil
   d.sentAgg = -1
   d.frustration = 0
   attitude.reset(d)
@@ -554,7 +586,7 @@ function C:onRefresh()
   -- would leave the car trying to park for the rest of its life.
   local obj = getObjectByID(self.veh.id)
   if obj then obj:queueLuaCommand('ai.setPullOver(false)') end
-  d.rs.state, d.rs.timer = 0, 60 + random() * 180
+  d.rs.state, d.rs.timer, d.rs.hazards = 0, 60 + random() * 180, false
   d.wt.mode, d.wt.timer, d.wt.speedCap = 0, 0, -1
   memory.clear(d.mem)
   d.clock, d.pm.count, d.pm.rayTimer = 0, 0, 0

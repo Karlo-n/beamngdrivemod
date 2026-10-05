@@ -427,6 +427,18 @@ function M.update(dt)
   if not startIncident(data) then nextCall = 25 end
 end
 
+-- Units sent from the duty radio. Same dispatch the incidents use, so they really drive
+-- there, stop at the kerb on arrival and go back to traffic on their own afterwards.
+function M.requestPatrol(pos)
+  return dispatchPatrol(pos)
+end
+
+function M.requestService(kind, pos)
+  local id, u = freeUnit(kind)
+  if not id then return nil end
+  return dispatch(id, u, pos, true) and id or nil
+end
+
 function M.label(id)
   local u = M.units[id]
   if not u then return nil end

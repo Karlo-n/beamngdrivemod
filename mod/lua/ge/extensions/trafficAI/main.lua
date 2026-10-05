@@ -245,10 +245,14 @@ local function antifreeze(dt)
   local data = gameplay_traffic and gameplay_traffic.getTrafficData()
   if not data then return end
   for id, v in pairs(data) do
-    -- Parked and stopped cars are meant to be still; so is anyone being arrested.
+    -- Parked and stopped cars are meant to be still; so is anyone being arrested, anyone
+    -- on an errand at the kerb, and a wreck waiting to be cleared. Thawing those last two
+    -- cut errands short after twelve seconds and drove crashed cars away from the scene.
+    local d = drivers[id]
     local allowed = parking.active[id] or policeStop.stops[id] or policeStop.active(id)
       or holds.isClaimed(id)
       or (v.pursuit and (v.pursuit.mode or 0) > 0)
+      or (d and (d.rs.state == 1 or d.crashState >= 2))
     if units.ai(v) and v.state == 'active' and (v.speed or 0) < 0.4 and not allowed then
       local t = (stillFor[id] or 0) + dt
       if t > FREEZE_LIMIT then
