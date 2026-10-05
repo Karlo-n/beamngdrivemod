@@ -435,6 +435,22 @@ end
 -- is almost entirely personality, so two equally angry drivers sound completely different.
 function C:maybeHonk(d, blocked, pcp, tickTime)
   d.hornTimer = d.hornTimer - tickTime
+
+  -- The light is green and the car in front has not moved: the person on their phone. A
+  -- short tap after a couple of seconds, from anyone who uses the horn at all.
+  local green = pcp.signalDist >= 0 and pcp.signalDist < 45 and pcp.signalAction == perception.ACTION_NONE
+  if green and self.veh.speed < 0.5 and pcp.leadId ~= 0 and pcp.leadSpeed < 0.5 and pcp.leadGap < 8 then
+    d.greenWait = (d.greenWait or 0) + tickTime
+    if d.greenWait > 2.5 + d.p.patience * 3 and d.hornTimer <= 0
+      and (d.d.warnStyle == 1 or d.d.warnStyle == 3) then
+      self.veh:honkHorn(0.12 + d.p.temper * 0.25)
+      d.hornTimer, d.greenWait = 6, 0
+      return
+    end
+  else
+    d.greenWait = 0
+  end
+
   if d.hornTimer > 0 or not blocked then return end
 
   -- Nobody sensible honks at a queue waiting for a red light.
@@ -662,6 +678,7 @@ function C:onTrafficTick(tickTime)
   local yielding = not evading and emergencyYield.update(d, ctx, pcp, tickTime) or nil
   local squeezing = not (evading or yielding) and squeeze.update(d, ctx, pcp, tickTime) or nil
   if (evading or squeezing or yielding) and d.lc.phase ~= 0 then
+    if d.lc.phase == laneChange.SIGNAL or d.lc.phase == laneChange.EXEC then base.signal(ctx, 0) end
     laneChange.reset(d) -- they all steer; only one may own the wheel
   end
 
@@ -669,7 +686,7 @@ function C:onTrafficTick(tickTime)
   -- Hand control back so the stock avoidance and routing can get it out.
   -- A lane change already under way is the way out, so it does not count as stuck.
   if self.veh.speed < 0.5 and blocked and not squeezing and not evading and not yielding
-    and d.lc.phase ~= laneChange.EXEC then
+    and d.lc.phase ~= laneChange.EXEC and d.lc.phase ~= laneChange.SIGNAL then
     d.stuckTimer = d.stuckTimer + tickTime
   else
     d.stuckTimer = 0

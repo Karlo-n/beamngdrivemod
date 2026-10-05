@@ -8,7 +8,7 @@ local format = string.format
 local base = require('trafficAI/behaviors/baseBehavior')
 local perception = require('trafficAI/environment/perception')
 
-M.IDLE, M.WANT, M.CHECK, M.EXEC, M.COOL = 0, 1, 2, 3, 4
+M.IDLE, M.WANT, M.CHECK, M.EXEC, M.COOL, M.SIGNAL = 0, 1, 2, 3, 4, 5
 
 local ABORT_MARGIN = 0.35 -- fraction of a lane still to cover when the timer runs out
 
@@ -34,10 +34,32 @@ local function targetLaneSafe(ctx, d, pcp)
   if pcp.tgtRearGap >= 0 then
     local closing = pcp.tgtRearSpeed - v
     local rearNeed = dd.gapMin + max(0, closing) * dd.rearPolitness * 2 + v * 0.25
+    -- The driver there has seen the indicator and is dropping back to let us in.
+    local rd = pcp.tgtRearId ~= 0 and trafficAI_main and trafficAI_main.getDriver(pcp.tgtRearId)
+    if rd and rd.dr.letIn and rd.dr.mergerSeen == ctx.id then rearNeed = rearNeed * 0.5 end
     if pcp.tgtRearGap < rearNeed then return false end
   end
 
   return true
+end
+
+-- Indicator first, then a look, then the move. Moving the instant the indicator came on gave
+-- nobody behind a chance to react, and it is not how anyone is taught to do it. The ones who
+-- never indicate still take a glance.
+local function begin(d, ctx, side)
+  local lc = d.lc
+  lc.phase, lc.side = M.SIGNAL, side
+  lc.timer = d.d.indicates and (0.9 + random() * 1.0) or (0.2 + random() * 0.3)
+  if d.d.indicates then base.signal(ctx, side) end
+  return 'laneChange'
+end
+
+-- A brief flash of the hazards to the driver who made room. Plenty of people do it.
+local function thank(d, ctx)
+  local veh = ctx.veh
+  if not veh or not veh.queuedFuncs or random() > 0.2 + d.p.tolerance * 0.5 then return end
+  base.send(ctx.id, 'electrics.set_warn_signal(1)')
+  veh.queuedFuncs.taiThanks = {timer = 1.3, vLua = 'electrics.set_warn_signal(0)'}
 end
 
 function M.update(d, ctx, pcp, dt)
@@ -48,12 +70,30 @@ function M.update(d, ctx, pcp, dt)
     if lc.cooldown < 0 then lc.cooldown = 0 end
   end
 
+  if lc.phase == M.SIGNAL then
+    lc.timer = lc.timer - dt
+    -- Still looking: the gap has to stay there for the whole time the indicator is on.
+    perception.senseTargetLane(ctx, d, lc.side * ctx.laneWidth)
+    if not ctx.valid or not targetLaneSafe(ctx, d, pcp) then
+      lc.phase, lc.cooldown = M.IDLE, 1.5
+      base.signal(ctx, 0)
+      return nil
+    end
+    if lc.timer > 0 then return 'laneChange' end
+    lc.phase, lc.timer = M.EXEC, dd.laneChangeTime
+    lc.targetOffset = ctx.laneCenter + lc.side * ctx.laneWidth
+    lc.tightRear = pcp.tgtRearGap >= 0 and pcp.tgtRearGap < 20
+    issue(ctx, lc)
+    return 'laneChange'
+  end
+
   if lc.phase == M.EXEC then
     lc.timer = lc.timer - dt
     local err = issue(ctx, lc)
     if abs(err) < ctx.laneWidth * 0.2 then
       lc.phase, lc.cooldown, lc.urge = M.COOL, 3 + random() * 4, 0
       base.signal(ctx, 0)
+      if lc.tightRear then thank(d, ctx) end
       return 'overtaking'
     end
     if lc.timer <= 0 then
@@ -94,13 +134,8 @@ function M.update(d, ctx, pcp, dt)
     if lc.keepRight <= 0 then
       perception.senseTargetLane(ctx, d, ctx.sideSign * ctx.laneWidth)
       if targetLaneSafe(ctx, d, pcp) then
-        lc.phase, lc.timer = M.EXEC, dd.laneChangeTime
-        lc.side = ctx.sideSign
-        lc.targetOffset = ctx.roadOffset + ctx.sideSign * ctx.laneWidth
         lc.keepRight = dd.laneDiscipline
-        if dd.indicates then base.signal(ctx, lc.side) end
-        issue(ctx, lc)
-        return 'laneChange'
+        return begin(d, ctx, ctx.sideSign)
       end
       lc.keepRight = 3
     end
@@ -128,15 +163,7 @@ function M.update(d, ctx, pcp, dt)
       perception.senseTargetLane(ctx, d, side * ctx.laneWidth)
       local safe = targetLaneSafe(ctx, d, pcp)
       d.pm.tgtSafe = safe and 1 or 0
-      if safe then
-        lc.phase = M.EXEC
-        lc.timer = dd.laneChangeTime
-        lc.side = side
-        lc.targetOffset = ctx.laneCenter + side * ctx.laneWidth
-        if dd.indicates then base.signal(ctx, lc.side) end
-        issue(ctx, lc)
-        return 'laneChange'
-      end
+      if safe then return begin(d, ctx, side) end
     end
   end
   return nil
@@ -145,7 +172,7 @@ end
 function M.reset(d)
   local lc = d.lc
   lc.phase, lc.timer, lc.cooldown = M.IDLE, 0, 0
-  lc.urge, lc.side, lc.targetOffset = 0, 0, 0
+  lc.urge, lc.side, lc.targetOffset, lc.tightRear = 0, 0, 0, false
   lc.keepRight = d.d.laneDiscipline
 end
 

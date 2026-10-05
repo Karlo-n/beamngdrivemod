@@ -139,6 +139,21 @@ end
 function M.episodes(d, ctx, pcp, dt)
   local ep, dd = d.ep, d.d
 
+  -- A horn snaps anyone out of their phone.
+  if d.state == 'distracted' and pcp.hornNearby then stateMachine.set(d, 'normal') end
+
+  -- Stopped at a red is when the phone comes out. Rolled once per stop.
+  local red = pcp.signalDist >= 0 and pcp.signalDist < 40
+    and (pcp.signalAction == 2 or pcp.signalAction == 3)
+  if ctx.speed > 3 then
+    ep.redRolled = false
+  elseif red and ctx.speed < 0.5 and not ep.redRolled then
+    ep.redRolled = true
+    if d.state == 'normal' and random() < dd.distractible * 0.45 then
+      stateMachine.escalate(d, 'distracted', 6 + random() * 14)
+    end
+  end
+
   -- Drink is not an episode, it is the whole trip.
   if d.drunk then
     if d.state ~= 'drunk' and d.stateDef.pri <= 3 then stateMachine.set(d, 'drunk') end

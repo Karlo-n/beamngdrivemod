@@ -21,7 +21,7 @@ local MAX_DIST_SQ = 80 * 80
 local MAX_SHOWN = 6
 local MAX_DETAIL = 3
 
-local LC_PHASE = {[0] = 'idle', 'want', 'check', 'exec', 'cool'}
+local LC_PHASE = {[0] = 'idle', 'want', 'check', 'exec', 'cool', 'intermitente'}
 local SQ_PHASE = {[0] = '-', 'pasa', 'vuelve'}
 local OT_PHASE = {[0] = '-', 'sale', 'ADELANTA', 'vuelve', 'ABORTA'}
 local PU_PHASE = {[0] = 'persigue', 'EMBISTE', 'SE LE CRUZA'}

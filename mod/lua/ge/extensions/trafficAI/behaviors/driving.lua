@@ -17,7 +17,8 @@ M.IGNORE, M.YIELD, M.ANNOYED, M.BRAKE_CHECK = 0, 1, 2, 3
 -- ordinary drivers look drunk. Sober, awake drivers are left entirely to the stock AI.
 local function laneWander(d, ctx, dt)
   local dr = d.dr
-  if ctx.laneWidth < 2 then return end
+  -- Standing at a light, a phone in hand drifts nothing.
+  if ctx.laneWidth < 2 or ctx.speed < 3 then return end
   local lw, state = ctx.laneWidth, d.state
 
   local want
@@ -89,7 +90,8 @@ local function rearPressure(d, ctx, pcp, dt)
     local yieldP = 0.25 + d.p.tolerance * 0.4 - d.p.aggression * 0.2
     local baitP = d.p.ragebait * 0.5 * (d.p.temper > 0.6 and 1 or 0.3)
     if r < yieldP then
-      dr.response = M.YIELD
+      -- Fixed at the decision: a cap relative to the current speed would keep shrinking.
+      dr.response, dr.yieldCap = M.YIELD, ctx.speed * 0.9
     elseif r < yieldP + baitP then
       dr.response = M.BRAKE_CHECK
     elseif r < yieldP + baitP + 0.3 then
@@ -101,7 +103,17 @@ local function rearPressure(d, ctx, pcp, dt)
     dr.pressTimer = 0
   end
 
-  if dr.response == M.BRAKE_CHECK and dr.responseTimer > 3 then
+  -- Letting them by. Yielding used to be picked and then do nothing at all. On a road with
+  -- one lane each way, a slow driver tucks toward the kerb and lifts off so the one behind
+  -- can see past and go; with a lane to spare, they simply move over to it.
+  if dr.response == M.YIELD and dr.responseTimer > 0 then
+    if ctx.ourLanes == 1 then
+      base.lateralHold(ctx, ctx.laneCenter + ctx.sideSign * 0.8, ctx.laneWidth)
+      dr.speedCap = dr.yieldCap
+    elseif ctx.laneIdx > 0 and d.lc.keepRight > 0.5 then
+      d.lc.keepRight = 0.5
+    end
+  elseif dr.response == M.BRAKE_CHECK and dr.responseTimer > 3 then
     dr.speedCap = ctx.speed * 0.55 -- a jab of the brakes, not a stop
   elseif dr.response == M.ANNOYED and d.p.horn > 0.4 and dr.responseTimer > 5.5 then
     dr.speedCap = ctx.speed * 0.85

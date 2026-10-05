@@ -34,7 +34,7 @@ local P = {
   id = 0, valid = false,
   leadId = 0, leadGap = -1, leadSpeed = 0, leadLen = 4.6, leadRelSpeed = 0, leadDecel = 0, leadStopped = false,
   lead2Gap = -1, lead2Speed = 0, -- the car in front of the car in front
-  tgtValid = false, tgtFrontGap = -1, tgtFrontSpeed = 0, tgtRearGap = -1, tgtRearSpeed = 0,
+  tgtValid = false, tgtFrontGap = -1, tgtFrontSpeed = 0, tgtRearGap = -1, tgtRearSpeed = 0, tgtRearId = 0,
   obstacleId = 0, obstacleGap = -1, obstacleHazard = false, rayGap = -1,
   leadSignal = 0, leadHazard = false, hornNearby = false, mergerId = 0, mergerGap = 0,
   oncomingId = 0, oncomingGap = -1, oncomingSpeed = 0,
@@ -474,7 +474,7 @@ end
 function M.senseTargetLane(ctx, d, laneDelta)
   P.tgtValid = false
   P.tgtFrontGap, P.tgtRearGap = -1, -1
-  P.tgtFrontSpeed, P.tgtRearSpeed = 0, 0
+  P.tgtFrontSpeed, P.tgtRearSpeed, P.tgtRearId = 0, 0, 0
 
   local myHalfLen = (ctx.veh.length or 4.6) * 0.5
   local myHalfW = (ctx.veh.width or 2.0) * 0.5
@@ -500,7 +500,7 @@ function M.senseTargetLane(ctx, d, laneDelta)
         end
       elseif gap < rear then
         rear = gap
-        P.tgtRearGap, P.tgtRearSpeed = gap, n.speed
+        P.tgtRearGap, P.tgtRearSpeed, P.tgtRearId = gap, n.speed, n.id
       end
     end
   end
