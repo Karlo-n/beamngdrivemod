@@ -1,0 +1,35 @@
+{
+  "trafficAI": {
+    "stop": {
+      "noticed": "A patrol has taken an interest in you.",
+      "pullOver": "Police behind you. Slow down and pull over.",
+      "pullOverSide": "You are being told to stop. Pull over to the {side}.",
+      "sideRight": "right",
+      "sideLeft": "left",
+      "goodStop": "Good. Come to a full stop and wait.",
+      "officerOut": "The officer is getting out of the car.",
+      "letGo": "They are letting you go. Drive carefully.",
+      "allClear": "All in order. You may go.",
+      "noShoulder": "Nowhere to pull over: they are stopping right here.",
+      "lostYou": "The patrol has lost you.",
+      "outOfPatience": "They have run out of patience.",
+      "fineTotal": "Signed. Fines this session: {total}.",
+      "layby": "Pull into the lay-by ahead."
+    },
+    "wanted": {
+      "swat": "Armoured unit dispatched.",
+      "roadblock": "Roadblock ahead.",
+      "unmarked": "Unmarked units are joining the pursuit.",
+      "trafficBreak": "A unit is holding the oncoming lane.",
+      "fast": "High-speed unit joining the pursuit."
+    },
+    "spikes": {
+      "ahead": "Spike strip ahead.",
+      "hit": "Tyres shredded."
+    },
+    "convoy": {
+      "seen": "Cash-in-transit convoy passing through.",
+      "robbed": "The armoured truck is being robbed!"
+    }
+  }
+}

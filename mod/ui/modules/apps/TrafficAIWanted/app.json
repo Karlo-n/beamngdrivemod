@@ -1,0 +1,23 @@
+{
+  "domElement": "<trafficaiwanted></trafficaiwanted>",
+  "name": "TrafficAI Wanted Level",
+  "types": ["ui.apps.categories.gameplay"],
+  "description": "Estrellas de busqueda de la policia / police wanted level",
+  "css": {
+    "left": "40%",
+    "top": "20px",
+    "width": "260px",
+    "height": "56px",
+    "min-width": "140px",
+    "max-width": "420px",
+    "min-height": "40px",
+    "max-height": "90px"
+  },
+  "author": "trafficAI",
+  "version": "1.0",
+  "preserveAspectRatio": true,
+  "directive": "trafficaiwanted",
+  "category": "Gameplay",
+  "isAuxiliary": false,
+  "interactive": "no"
+}

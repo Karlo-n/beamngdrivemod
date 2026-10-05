@@ -1,0 +1,18 @@
+{
+  "trafficAI_toggle_overlay": {
+    "cat": "debug",
+    "order": 900,
+    "ctx": "tlua",
+    "onDown": "if trafficAI_main then trafficAI_main.toggleOverlay() end",
+    "title": "TrafficAI - Toggle Debug Overlay",
+    "desc": "Shows driver type, personality, state and gap above nearby traffic"
+  },
+  "trafficAI_emergency_ui": {
+    "cat": "gameplay",
+    "order": 20,
+    "ctx": "tlua",
+    "onDown": "if trafficAI_duty then trafficAI_duty.showConsole() end",
+    "title": "TrafficAI: consola de emergencias",
+    "desc": "Abre la consola de servicio (policia, sanitarios, bomberos)"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "trafficAI": {
+    "stop": {
+      "noticed": "Una patrulla se ha fijado en ti.",
+      "pullOver": "Policia detras de ti. Reduce y orillate.",
+      "pullOverSide": "Te estan mandando parar. Orillate a la {side}.",
+      "sideRight": "derecha",
+      "sideLeft": "izquierda",
+      "goodStop": "Bien. Para del todo y espera.",
+      "officerOut": "El agente baja del coche.",
+      "letGo": "Te dejan seguir. Con cuidado.",
+      "allClear": "Todo en orden. Puedes seguir.",
+      "noShoulder": "No hay donde orillarse: paran aqui mismo.",
+      "lostYou": "La patrulla te ha perdido.",
+      "outOfPatience": "Se les acabo la paciencia.",
+      "fineTotal": "Firmado. Total de multas: {total}.",
+      "layby": "Metete en el area de parada de ahi delante."
+    },
+    "wanted": {
+      "swat": "Unidad blindada en camino.",
+      "roadblock": "Control policial mas adelante.",
+      "unmarked": "Se suman unidades de incognito.",
+      "trafficBreak": "Una patrulla corta el sentido contrario.",
+      "fast": "Unidad de alta velocidad incorporandose."
+    },
+    "spikes": {
+      "ahead": "Bandas de pinchos mas adelante.",
+      "hit": "Ruedas reventadas."
+    },
+    "convoy": {
+      "seen": "Furgon blindado de transporte de fondos.",
+      "robbed": "Estan asaltando el furgon blindado!"
+    }
+  }
+}

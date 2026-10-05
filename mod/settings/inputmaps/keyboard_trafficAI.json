@@ -1,0 +1,12 @@
+{
+  "bindings": [
+    {
+      "action": "trafficAI_toggle_overlay",
+      "control": "ctrl alt d"
+    },
+    {
+      "action": "trafficAI_emergency_ui",
+      "control": "ctrl alt e"
+    }
+  ]
+}
