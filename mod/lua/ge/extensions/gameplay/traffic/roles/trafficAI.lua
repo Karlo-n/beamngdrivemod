@@ -355,8 +355,9 @@ function C:pickCrashOutcome(sev)
   if sev >= 0.75 then return 'wrecked' end
 
   local driveOn = 0
-  if sev < 0.22 then
-    driveOn = d.d.bravery * (1 - sev * 3)
+  -- Only a real scrape is shrugged off; anything more and people stop and look.
+  if sev < 0.12 then
+    driveOn = d.d.bravery * 0.6 * (1 - sev * 6)
     if driveOn < 0 then driveOn = 0 end
   end
 
@@ -368,7 +369,7 @@ function C:pickCrashOutcome(sev)
   -- into them; being hit from behind is never a reason to flee.
   local flee = 0
   if d.crash.dot > 0 and not d.crash.selfOnly and sev < 0.5 then
-    flee = (1 - d.p.prudence) * 0.3 + d.p.aggression * 0.12
+    flee = ((1 - d.p.prudence) * 0.3 + d.p.aggression * 0.12) * 0.4
   end
 
   local r = random()
@@ -480,6 +481,12 @@ function C:maybeHonk(d, blocked, pcp, tickTime)
   end
 
   if d.hornTimer > 0 or not blocked then return end
+  -- Nobody leans on the horn at a wreck or a car with its hazards on, and someone who has
+  -- just been in a crash is shaken, not tooting at the scene.
+  if pcp.leadHazard or (d.crash.at > 0 and d.clock - d.crash.at < 40) then
+    d.hornTimer = 4
+    return
+  end
 
   -- Nobody sensible honks at a queue waiting for a red light.
   if pcp.signalDist >= 0 and pcp.signalDist < 45

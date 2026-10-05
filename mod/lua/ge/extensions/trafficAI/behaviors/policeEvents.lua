@@ -130,7 +130,8 @@ scenes.radar = {rare = true, w = 3, label = 'control de velocidad',
     for id, v in pairs(data) do
       if id ~= s.pid and v.pos and v.tracking and not v.isPerson then
         local speed = v.vel and v.vel:length() or 0
-        if speed > (v.tracking.speedLimit or 16) * 1.25 and v.pos:squaredDistance(pol.pos) < 2500 then
+        -- Real radar tolerance: a few km/h over is let go, only a clear excess is stopped.
+        if speed > (v.tracking.speedLimit or 16) * 1.25 + 3 and v.pos:squaredDistance(pol.pos) < 2500 then
           send(s.pid, 'ai.setPullOver(false)')
           if policeStop.begin(id, 'exceso de velocidad', 0.6) then
             s.caught = true
