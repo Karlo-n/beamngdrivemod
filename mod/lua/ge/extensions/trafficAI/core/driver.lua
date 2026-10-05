@@ -112,7 +112,7 @@ function M.new(id, typeId)
   -- The naco genuinely goes faster than everyone else and weaves. Everything else about
   -- them still comes out of their traits like any other driver.
   if t.id == 'speeder' then
-    d.d.speedFactor = d.d.speedFactor * 1.25
+    d.d.speedFactor = math.min(d.d.speedFactor * 1.22, 1.45)
     d.d.overtakeEagerness = math.min(1, d.d.overtakeEagerness + 0.4)
     d.d.overtakeWait = d.d.overtakeWait * 0.3
     d.d.overtaker = true

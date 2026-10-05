@@ -50,7 +50,9 @@ function M.derive(p, s)
     distractible = clamp((1 - s.perception) * 0.6 + (1 - p.prudence) * 0.3 + random() * 0.2, 0, 1),
 
     -- IDM and lane-change parameters, resolved here so the behaviours only read numbers.
-    speedFactor = clamp(0.80 + p.aggression * 0.30 - p.prudence * 0.12, 0.72, 1.20),
+    -- Free-flow speeds sit around the limit, with most drivers within about 15% either
+    -- side. Centred lower, a road full of 70-in-a-90 drivers queued up behind each other.
+    speedFactor = clamp(0.88 + p.aggression * 0.28 - p.prudence * 0.10, 0.82, 1.22),
     maxAccel = clamp(1.0 + p.aggression * 1.8 + s.control * 0.6, 0.8, 3.2),
     maxDecel = clamp(1.8 + p.aggression * 1.6 + s.control * 0.8, 1.5, 4.5),
     gapMin = 2.0 + p.prudence * 3.5,

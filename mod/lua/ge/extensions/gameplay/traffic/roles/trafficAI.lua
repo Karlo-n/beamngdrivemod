@@ -165,7 +165,7 @@ function C:updateRoadsideStop(d, ctx, tickTime)
   local delivery = d.typeId == 'delivery' and urban
   local downpour = conditions.rain > 0.8
   local chance = bus and 0.6 or (delivery and 0.25 or d.d.errandChance)
-  if downpour then chance = chance + d.p.prudence * 0.1 end
+  if downpour then chance = chance + d.p.prudence * 0.05 end
   if random() > chance then return false end
 
   -- Only where there is a shoulder to stop on. 0.8 m of room is exactly what an ordinary
@@ -674,6 +674,21 @@ function C:onTrafficTick(tickTime)
     d.sq.ignoreId, d.ot.ignoreId, d.ot.speedBoost = 0, 0, 1
     self:updateWitness(d, ctx, tickTime)
     self:syncAggression()
+    -- Out of sight there is no squeeze or lane change, so a car stuck behind something
+    -- stopped (a bus, a van, a wreck) was pinned at zero for good: the watchdog's release
+    -- was overwritten on the next tick. Same escape as up close: hand it to the stock AI.
+    if d.yieldTimer > 0 then
+      d.yieldTimer = d.yieldTimer - tickTime
+      carFollowing.release(d, self.veh.id)
+      stateMachine.setManeuver(d, 'none')
+      return
+    end
+    if self.veh.speed < 0.5 and pcp.leadId ~= 0 and pcp.leadSpeed < 0.6 then
+      d.stuckTimer = d.stuckTimer + tickTime
+      if d.stuckTimer > 8 then d.stuckTimer, d.yieldTimer = 0, 8 end
+    else
+      d.stuckTimer = 0
+    end
     carFollowing.update(d, ctx, pcp, tickTime)
     stateMachine.setManeuver(d, 'following')
     return
@@ -716,10 +731,12 @@ function C:onTrafficTick(tickTime)
 
   -- Sitting still for a while means our speed cap is the thing holding the car in place.
   -- Hand control back so the stock avoidance and routing can get it out.
-  -- A lane change already under way is the way out, so it does not count as stuck.
-  if self.veh.speed < 0.5 and blocked and not squeezing and not evading and not yielding
-    and d.lc.phase ~= laneChange.EXEC and d.lc.phase ~= laneChange.SIGNAL then
-    d.stuckTimer = d.stuckTimer + tickTime
+  -- A lane change under way is the way out, so it pauses the count. Pausing, not resetting:
+  -- a car that keeps indicating into a lane that never clears would otherwise reset it
+  -- every couple of seconds and never be let go.
+  local changing = d.lc.phase == laneChange.EXEC or d.lc.phase == laneChange.SIGNAL
+  if self.veh.speed < 0.5 and blocked and not squeezing and not evading and not yielding then
+    if not changing then d.stuckTimer = d.stuckTimer + tickTime end
   else
     d.stuckTimer = 0
   end
